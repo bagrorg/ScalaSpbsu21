@@ -29,7 +29,7 @@ class TheGameTest extends AnyFunSuite {
 
   test("incorrect guess is reported") {
     assert(validate("0", "1").isInstanceOf[TheGame.Incorrect])
-    assert(validate("12345", "00000").isInstanceOf[TheGame.Incorrect])
+    assert(validate("12345", "ABCDE").isInstanceOf[TheGame.Incorrect])
   }
 
   test("correct guess validates") {
