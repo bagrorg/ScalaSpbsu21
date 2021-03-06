@@ -1,0 +1,451 @@
+\documentclass[aspectratio=169]{beamer}
+
+% SETUP =====================================
+\usepackage[T1,T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage{listings}
+\usepackage{array}
+\usepackage{amssymb}
+\usepackage{pifont}
+\usepackage{minted}
+\usepackage{../../beamerthemeslidesgeneric}
+% SETUP =====================================
+
+\title{Scala Implicits}
+\author{Mikhail Mutcianko, Alexey Shcherbakov}
+\institute{СПБгУ, СП}
+\date{4 марта 2021}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\section{Scala function parameters}
+
+\begin{frame}[fragile]{Parameter lists}
+  Scala allows function definitions with multiple parameter lists \\
+\begin{minted}{scala}
+def multiply(a: Int, b: Int): Int|\pause|
+def multiply(a: Int)(b: Int): Int|\pause|
+
+multiply(2,3)
+multiply(2)(3)
+\end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Omitting parenthesis}
+If parameters to a function are not required at call-site, the parenthesis can be omited \\
+\begin{minted}{scala}
+def foo(x: Int = 123)()
+
+foo() // OK(with a warning)
+\end{minted}
+\end{frame}
+
+\section{Implicit parameters}
+
+\begin{frame}{Implicit parameters}
+  \begin{block}{}
+    A method can have an implicit parameter list, marked by the \alert{implicit} keyword at the
+    start of the parameter list.\vspace{1em}\\If the parameters in that parameter list are not
+    passed as usual, Scala compiler will look if it can get an implicit value of the correct type,
+    and if it can, pass it automatically. 
+  \end{block}
+\end{frame}
+
+\begin{frame}[fragile]{Implicit parameters}{Example}
+\begin{onlyenv}<1>
+  \begin{minted}{scala}
+  ???
+
+  def findInt(implicit int: Int): Int = int
+
+  findInt // res0 = 123
+  \end{minted} 
+\end{onlyenv}
+\begin{onlyenv}<2>
+  \hig{1}
+  \begin{minted}{scala}
+  implicit val i: Int = 123
+
+  def findInt(implicit int: Int): Int = int
+
+  findInt // res0 = 123
+  \end{minted}
+\end{onlyenv}
+\end{frame}
+
+\begin{frame}{Trivia}
+  \begin{itemize}
+    \item all parameters in a clause will be implicit
+    \item only one implicit clause allowed per function
+    \item implicit clause must be the last one
+    \item all parameters must be found to omit the clause
+    \item implicit parameters can be passed explicitly
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Application rules}
+  Say, a function takes an implicit parameter of type \texttt{T}. \\
+  The compiler will search an implicit definition that:
+  \bigskip
+  \begin{itemize}
+    \item is marked \texttt{implicit}
+    \item has a type compatible with \texttt{T}
+    \item is visible at the point of the function call
+      or is defined in a companion object associated with \texttt{T}
+  \end{itemize}
+  \bigskip
+  If there is a single (most specific) definition, it will be taken as actual argument for the
+  implicit parameter. Otherwise it's an error.
+\end{frame}
+
+\begin{frame}[fragile]{Passing implicit parameters}
+\alert{implicit} parameters keep their \textit{implicitness} inside a function definition
+\bigskip
+\begin{minted}{scala}
+def foo(i: Int)(implicit ctx: Context)    = bar(i.toString) // ctx is passed to bar
+def bar(s: String)(implicit ctx: Context) = println(s)
+
+implicit def c: Context = ???
+foo(42)
+\end{minted}
+\end{frame}
+
+\section{Implicit definitions}
+
+\begin{frame}[fragile]{Implicit definitions}
+Implicit parameter is substisuted as a value. Value definitions in Scala can be marked as 
+\alert{implicit} \vspace{1em}
+\begin{onlyenv}<1>
+  \begin{minted}{scala}
+  trait Context
+  
+  def foo(i: Int)(implicit ctx: Context)    = bar(i.toString)
+  def bar(s: String)(implicit ctx: Context) = println(s)
+  
+  implicit val c: Context = new Context {}
+  foo(42)
+  \end{minted}
+\end{onlyenv}
+\begin{onlyenv}<2>
+  \hig{6}
+ \begin{minted}{scala}
+  trait Context
+  
+  def foo(i: Int)(implicit ctx: Context)    = bar(i.toString)
+  def bar(s: String)(implicit ctx: Context) = println(s)
+  
+  implicit def c: Context = new Context {}
+  foo(42)
+  \end{minted} 
+\end{onlyenv}
+\begin{onlyenv}<3>
+  \hig{6}
+ \begin{minted}{scala}
+  trait Context
+  
+  def foo(i: Int)(implicit ctx: Context)    = bar(i.toString)
+  def bar(s: String)(implicit ctx: Context) = println(s)
+  
+  implicit object c extends Context {}
+  foo(42)
+  \end{minted} 
+\end{onlyenv}
+\end{frame}
+
+\begin{frame}[fragile]{Definition restriction}
+\texttt{implicit} definitions cannot be top-level
+\bigskip
+\begin{minted}{scala}
+//file Foo.scala
+package com.foo.bar
+
+implicit object Foo { 
+ // ^--- error: `implicit' modifier cannot be used for top-level objects
+}
+\end{minted}
+\end{frame}
+
+\section{Implicit Conversions}
+
+\begin{frame}[fragile]{Implicit conversion}
+  \begin{block}{}
+    When a the provided type doesn't match the expected type, the Scala compiler looks for any
+    method in scope marked implicit that takes the provided type as parameter and returns the
+    expected type as a result. If found, it inserts the call to the method in between.
+  \end{block}
+  \bigskip
+  %\pause
+  \begin{onlyenv}<1>
+   \begin{minted}{scala}
+    implicit def int2String(i: Int): String = i.toString()
+
+    123.startsWith("12")
+   \end{minted} 
+  \end{onlyenv}
+  \begin{onlyenv}<2>
+    \hig{3}
+     \begin{minted}{scala}
+      implicit def int2String(i: Int): String = i.toString()
+
+      int2string(123).startsWith("12")
+     \end{minted} 
+    \end{onlyenv}
+\end{frame}
+
+\begin{frame}[fragile]{Implicit conversions}{Limitations}
+Implicit conversions \textbf{cannot} be nested at \textit{application-site}\\ but \textbf{can}
+be nested during \textit{resolve}
+\medskip
+\begin{onlyenv}<1>
+\begin{minted}{scala}
+case class A(i: Int)
+case class B(i: Int)
+case class C(i: Int)
+
+implicit def aToB(a: A): B = B(a.i)
+implicit def bToC(b: B): C = C(b.i)
+
+val a = A(1)
+val c: C = a // error: type mismatch, expected C got A
+\end{minted} 
+\end{onlyenv}
+\begin{onlyenv}<2>
+\hig{6}
+\begin{minted}{scala}
+case class A(i: Int)
+case class B(i: Int)
+case class C(i: Int)
+
+implicit def aToB(a: A): B = B(a.i)
+implicit def bToC[T](t: T)(implicit tToB: T => B): C = C(t.i)
+
+val a = A(1)
+val c: C = a // OK
+\end{minted}
+\end{onlyenv}
+\end{frame}
+
+\begin{frame}[fragile]{Implicits class}
+\begin{block}{}
+   An \alert{implicit class}  is a class marked with the \texttt{implicit} keyword. This keyword
+   makes the class’s primary constructor available for implicit conversions when the class is in
+   scope
+\end{block}
+\bigskip
+\begin{onlyenv}<1>
+  \begin{minted}{scala}
+implicit class RichString(val str: String) {
+  def toUrl: URL = new URL(str)
+}
+
+"https://foo.com".toUrl
+\end{minted}
+\end{onlyenv}
+\begin{onlyenv}<2>
+  \hig{1}
+  \begin{minted}{scala}
+implicit class RichString(val str: String) extends AnyVal {
+  def toUrl: URL = new URL(str)
+}
+
+"https://foo.com".toUrl
+\end{minted}
+\end{onlyenv}
+\begin{onlyenv}<3>
+  \hig{5}
+  \begin{minted}{scala}
+implicit class RichString(val str: String) extends AnyVal {
+  def toUrl: URL = new URL(str)
+}
+
+new RichString("https://foo.com").toUrl
+\end{minted}
+\end{onlyenv}
+\end{frame}
+
+\begin{frame}[fragile]{Implicit class}{Limitations}
+1. They must be defined inside of another trait/class/object
+\bigskip
+\begin{minted}{scala}
+object Helpers {
+   implicit class RichInt(x: Int) // OK!
+}
+
+implicit class RichDouble(x: Double) // BAD!
+\end{minted}
+\end{frame}
+
+
+\begin{frame}[fragile]{Implicit class}{Limitations}
+2. They may only take one non-implicit argument in their constructor
+\bigskip
+\begin{minted}{scala}
+implicit class RichDate(date: java.util.Date) // OK!
+implicit class Indexer[T](collection: Seq[T], index: Int) // BAD!
+implicit class Indexer[T](collection: Seq[T])(implicit index: Index) // OK!
+\end{minted}
+\end{frame}
+
+
+\begin{frame}[fragile]{Implicit class}{Limitations}
+3. There may not be any method, member or object in scope with the same name as the implicit
+class\\[1em]
+\alert{NB!} \textit{This means an implicit class cannot be a case class}
+\bigskip
+\begin{minted}{scala}
+object Bar
+implicit class Bar(x: Int) // BAD!
+
+val x = 5
+implicit class x(y: Int) // BAD!
+
+implicit case class Baz(x: Int) // BAD!
+\end{minted}
+\end{frame}
+
+\section{Implicit Search}
+
+\begin{frame}[fragile]{1 - Local scope}
+\bigskip
+\begin{minted}{scala}
+trait Show[A] { def show(a: A): String }
+
+implicit val showInt: Show[Int] = new Show[Int] {
+  def show(a: Int): String = a.toString
+}
+
+def stringify[A](a: A)(implicit s: Show[A]): String = s.show(a)
+stringify(1)
+\end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{2 - Explicit imports}
+\bigskip
+\begin{minted}{scala}
+trait Show[A] { def show(a: A): String }
+
+def stringify[A](a: A)(implicit s: Show[A]): String = s.show(a)
+
+import Show.instances.intShow
+stringify(1)
+\end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{3 - Wildcard imports}
+\bigskip
+\begin{minted}{scala}
+trait Show[A] { def show(a: A): String }
+
+def stringify[A](a: A)(implicit s: Show[A]): String = s.show(a)
+
+import Show.instances._
+stringify(1)
+\end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{4 - Companion object of type}{or Implicit scope of an argument’s type}
+\bigskip
+\begin{minted}{scala}
+trait Show[A] { def show(a: A): String }
+case class Foo(a: Int)
+object Foo {
+  implicit val fooShow: Show[Foo] = {f: Foo => f.toString}
+}
+
+def stringify[A](a: A)(implicit s: Show[A]): String = s.show(a)
+stringify(Foo(1))
+\end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{5 - Implicit scope of type arguments}{or Companion object of a Type Class}
+\begin{minted}{scala}
+  case class Foo(i: Int)
+  object Foo {
+    implicit def showFoo: Show[Foo] = {f: Foo => f.i.toString}
+  }
+  trait Show[A] {def show(a: A): String}
+  object Show {
+    implicit def showOpt[A](implicit s: Show[A]): Show[Option[A]] = ...
+  }
+  def stringify[A](a: A)(implicit s: Show[A]): String = s.show(a)
+  stringify(Option(Foo(1)))
+\end{minted}
+\end{frame}
+
+\section{Implicit's Application Patterns Intro}
+
+\begin{frame}[fragile]{Library syntax}{Context bounds}
+Context bounds are basically syntactic sugar for less verbose typeclass applications.\\
+The following lines are identical:
+\bigskip
+\begin{minted}{scala}
+def g[A : B](a: A) = implicitly[B[A]].h(a)
+def g[A](a: A)(implicit ev: B[A]) = ev.h(a)
+\end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Library syntax}
+Split typeclasses and syntax enrichments via implicit conversions and context bounds
+\begin{minted}{scala}
+object Show {
+  object syntax {
+    implicit class ShowSyntax[A](val a: A) extends AnyVal {
+      def stringify(implicit s: Show[A]): String = s.show(a)
+} } }
+
+import Show.syntax._
+def stringify[A: Show](a: A): String = a.stringify
+
+stringify(1)
+1.stringify
+\end{minted}
+\end{frame}
+
+\begin{frame}{Context pattern}
+  \begin{block}{}
+    The most basic use of implicits is the Implicit Context pattern: using them to pass in some
+    "context" object into all your methods.\\This is something you could pass in manually, but is
+    common enough that simply "not having to pass it everywhere" is itself a valuable goal.
+  \end{block}
+\end{frame}
+
+\begin{frame}[fragile]{Context pattern}{Example}
+\begin{minted}{scala}
+class Context
+def foo(i: Int)(implicit context: Context): String = ???
+def bar(s: String)(implicit context: Context): String = ???
+def baz(i: Int)(implicit context: Context): String = bar(foo(i))
+
+implicit def context = new Context
+baz(1)
+\end{minted}
+\end{frame}
+
+
+\begin{frame}[fragile]{Implicit derivation}
+One neat thing about using Type-class Implicits is that you can perform "deep" checks.
+\hig{7}
+\begin{minted}{scala}
+  case class Foo(i: Int)
+  trait Show[A] {def show(a: A): String}
+  object Show {
+    implicit def showFoo: Show[Foo] =
+      {f: Foo => f.i.toString}
+    implicit def showSeq[A: Show]: Show[Seq[A]] =
+      (a: Seq[A]) => a.map(x => implicitly[Show[A]].show(x)).mkString
+  }
+  def stringify[A](a: A)(implicit s: Show[A]): String = s.show(a)
+  stringify(Seq(Seq(Foo(1))))
+\end{minted}
+\end{frame}
+
+
+%\begin{thebibliography}{9} \bibitem{spec-lin}
+%\url{https://www.scala-lang.org/files/archive/spec/2.11/05-classes-and-objects.html#class-linearization}
+%\end{thebibliography}
+
+\end{document}
+

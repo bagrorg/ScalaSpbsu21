@@ -458,22 +458,28 @@ def selection[A <: Animal](a1: A, a2: A): A =
   \vspace{1em}
 \begin{onlyenv}<1>
     \begin{minted}{scala}
-  class Foo[A] { def f(x: Foo[A]) = ??? }
-
-  val foo = new Foo[Number]
-  foo.f(new Foo[Int]) // error: type mismatch found: Foo[Int], required: Foo[Number]
+  trait Animal
+  trait Dog extends Animal
+  case class Foo[T]()
+  
+  val data: Foo[Animal] = Foo[Dog]
+                     // |$\uparrow$| error: type mismatch found: Foo[Animal], required: Foo[Dog]
   \end{minted}
 \end{onlyenv}
 \begin{onlyenv}<2>
-  \hig{1,4}
+  \hig{3}
     \begin{minted}{scala}
-  class Foo[+A] { def f[T <: A](x: Foo[T]) = ??? }
-
-  val foo = new Foo[Number]
-  foo.f(new Foo[Int]) // OK
+  trait Animal
+  trait Dog extends Animal
+  case class Foo[+T]()
+  
+  val data: Foo[Animal] = Foo[Dog] 
+                     // OK
   \end{minted}
 \end{onlyenv}
 \end{frame}
+
+% TODO: FR: Nothing and Covariance(example: None extends Option[Nothing] / Nil extends Seq[Nothing])
 
 % sidenote: variance of java arrays
 \begin{frame}[fragile]{Java array variace}
