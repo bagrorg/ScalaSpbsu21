@@ -29,21 +29,14 @@ object MyGenericList {
       case (MyGenericNil, _) => 1
       case (_, MyGenericNil) => -1
       case _ =>
-        val res = signum(implicitly[Ordering[T]].compare(x.head, y.head))
-        if (res == 0) compare(x.tail, y.tail)
-        else res
+        if (Ordering[T].equiv(x.head, y.head)) compare(x.tail, y.tail)
+        else Ordering[T].compare(x.head, y.head)
     }
   }
 
   def sort[T](list: MyGenericList[T])(implicit ordering: Ordering[T]): MyGenericList[T] = {
-    def getMinElem(list: MyGenericList[T])(implicit ordering: Ordering[T]): T = list match {
-      case MyGenericCons(x, MyGenericNil) => x
-      case MyGenericCons(h, t) => foldLeft(h)((x: T, y: T) => signum(ordering.compare(x, y)) match {
-        case 0 => x
-        case 1 => y
-        case -1 => x
-      })(list)
-    }
+    def getMinElem(list: MyGenericList[T])(implicit ordering: Ordering[T]): T =
+      foldLeft(list.head)((x: T, y: T) => ordering.min(x,y))(list)
 
     list match {
       case MyGenericNil => MyGenericNil

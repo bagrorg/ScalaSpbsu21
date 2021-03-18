@@ -3,9 +3,7 @@ package org.spbsu.mkn.scala
 import org.scalatest.funsuite.AnyFunSuite
 import org.spbsu.mkn.scala.MyGenericList.{fromSeq, size, sort, sum}
 
-import java.util.Comparator
 import scala.math.Ordering._
-import scala.math.signum
 
 class MyGenericListTest extends AnyFunSuite {
   class ForTest()
@@ -66,6 +64,7 @@ class MyGenericListTest extends AnyFunSuite {
   }
 
   test(testName = "sort") {
+    assert(sort[Int](MyGenericNil) == MyGenericNil)
     assert(sort(fromSeq(Seq(10,9,8,7,1,2,3,4,5,6))) == fromSeq(Seq(1,2,3,4,5,6,7,8,9,10)))
     assert(sort(fromSeq(Seq("abc", "bc", "aaa", "bb"))) == fromSeq(Seq("aaa", "abc", "bb", "bc")))
     assert(sort(fromSeq(Seq('a','b','c','e','d'))) == fromSeq(Seq('a','b','c','d','e')))
