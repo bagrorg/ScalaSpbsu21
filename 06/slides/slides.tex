@@ -1,0 +1,409 @@
+\documentclass[aspectratio=169]{beamer}
+
+% SETUP =====================================
+\usepackage[T1,T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage{listings}
+\usepackage{array}
+\usepackage{amssymb}
+\usepackage{pifont}
+\usepackage{minted}
+\usepackage{../../beamerthemeslidesgeneric}
+% SETUP =====================================
+
+\title{Scala Type System III}
+\author{Mikhail Mutcianko, Alexey Shcherbakov}
+\institute{СПБгУ, СП}
+\date{11 марта 2021}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\section{Structural Types}
+
+\begin{frame}{Disclaimer}
+  \begin{center}
+    \LARGE \alert{Do not} use structural types unless you're 100\% sure you need them
+  \end{center}
+\end{frame}
+
+\begin{frame}[fragile]{Structural Types}
+  \begin{block}{}
+    \textit{Structural type} is a type whose conformance is defined by its strucrure(a set of
+    contained signatures) only. 
+  \end{block}
+  \bigskip
+  \pause
+  \begin{minted}{scala}
+  type withFoo = { def foo(x: Int): String }
+
+  def foo(x: withFoo)
+  def bar(x: { def foo(x: Int): String })
+  \end{minted}
+\end{frame}
+
+\begin{frame}{Structural Types}
+  \begin{itemize}
+    \item implemented using runtime reflection --- watch performance
+    \item \textit{usecase}: combine with \texttt{.asInstanceOf} for straightforward reflective method
+      calls
+  \end{itemize}
+\end{frame}
+
+\section{This Types}
+\begin{frame}[fragile]{Singleton types}
+  \begin{block}{}
+    \textit{Singleton type} is a type of a single value, to which only this particular value and
+    \texttt{null} conform.
+  \end{block}
+  \pause
+  \begin{minted}{scala}
+  val hello = "Hello"
+  
+  val notHello:  hello.type = "world" // error: type mismatch
+  val alsoHello: hello.type = hello   // OK
+
+  |\pause|object A
+  def method(): A.type = A
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Singleton Types}{Method chaining}
+\begin{minted}{scala}
+class A 
+  { def method1: this.type = { ...; this } }
+class B extends A 
+  { def method2: this.type = { ...; this } }
+
+new B.method1.method2 // OK
+\end{minted}
+\end{frame}
+
+\section{F-bound Polymorphism}
+\begin{frame}{Problem}
+  \begin{block}{Frequent question}
+      I have a type hierarchy … how do I declare a supertype method that returns the “current”
+      type?\cite{f-bounds}
+  \end{block}
+\end{frame}
+
+\begin{frame}[fragile]{F-bound Polymorphism}
+\begin{onlyenv}<1>
+\begin{minted}{scala}
+trait Pet { 
+  def renamed: Pet 
+}
+
+abstract class Dog extends Pet
+
+class Cat extends Pet {
+  override def renamed: Dog = ??? // OOPS
+}
+\end{minted}
+\end{onlyenv}
+
+\begin{onlyenv}<2>
+\begin{minted}{scala}
+trait Pet {
+  type T <: Pet
+  def renamed: T 
+}
+
+abstract class Dog extends Pet
+
+class Cat extends Pet {
+  override type T = Dog
+  override def renamed: Dog = ??? // still OOPS
+}
+\end{minted}
+\end{onlyenv}
+\begin{onlyenv}<3>
+\begin{minted}{scala}
+trait Pet {
+  type T >: this.type <: Pet
+  def renamed: T 
+}
+
+abstract class Dog extends Pet
+
+class Cat extends Pet {
+  override type T = Dog   // error: type T has incompatible type
+  override def renamed: Dog = ???
+}
+\end{minted}
+\end{onlyenv}
+\begin{onlyenv}<4>
+\begin{minted}{scala}
+trait Pet {
+  type T >: this.type <: Pet
+  def renamed: T 
+}
+
+abstract class Dog extends Pet
+
+class Cat extends Pet {
+  override type T = Cat
+  override def renamed: Cat = ??? // OK |\cmark|
+}
+\end{minted}
+\end{onlyenv}
+\end{frame}
+
+\section{Existential Types}
+\begin{frame}{Existential Types}
+  \begin{block}{}
+    \textit{Existential type} lets up assume \textbf{existence} of some type parameter without
+    exposing or providing it explicitly\cite{exis-adv}
+  \end{block}
+\end{frame}
+
+\begin{frame}[fragile]{Existential Types}
+  \begin{onlyenv}<1>
+    \begin{minted}{scala}
+    trait Foo[T] { def foo: T }
+    
+    type Dep[A] = Foo[A]                    // A is required on lhs
+    type Exis   = Foo[A] forSome { type A } // A only in rhs
+    type ExisA  = Foo[_]                    // A is not required at all
+    
+    def bar(x: Exis) = x.foo // return type ?
+    \end{minted}
+  \end{onlyenv}
+\begin{onlyenv}<2>
+    \begin{minted}{scala}
+    trait Foo[T] { def foo: T }
+    
+    type Dep[A] = Foo[A]                           // A is required on lhs
+    type Exis   = Foo[A] forSome { type A <: Int } // A only in rhs
+    type ExisA  = Foo[_ <: Int]                    // A is not required at all
+    
+    def bar(x: Exis): Int = x.foo
+    \end{minted}
+  \end{onlyenv}
+\end{frame}
+
+\section{Higher-Kinded Types}
+
+\begin{frame}{Kinds}
+  \begin{block}{}
+    \textit{Kinds} are an abstraction over types that implement parametric polymorphism in Scala
+  \end{block}
+  \bigskip
+  Tere are two \textit{kinds} in Scala:
+  \begin{itemize}
+    \item \textbf{*} --- a proper type
+    \item $\rightarrow$ --- a type constructor
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Kinds}{Example}
+\begin{verbatim}
+scala> :kind -v String
+String's kind is A { * }
+This is a proper type.
+
+scala> :kind -v List
+List's kind is F[+A] { * -(+)-> * }
+This is a type constructor: a 1st-order-kinded type.
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[fragile]{Type Constructor}
+  \begin{block}{}
+    A \textit{type constructor} is a type-level function of a $\rightarrow$ kind, that takes type
+    parameters and applies them to yield a proper type or another type constructor
+  \end{block}
+  \bigskip
+  \begin{minted}{scala}
+  type IntList = List[Int]
+  type StringOrInt = Either[String, Int]
+
+  type StringOr??? = Either[String, _] // how?
+  \end{minted}
+\end{frame}
+
+\begin{frame}{Higher Kinded Types}
+  \begin{block}{}
+    A \textit{higher kinded type} is a type constructor that accepts or returns another type constructor.\\
+    This is analogous to a higher-order function, and denoted as $(* \rightarrow *) \rightarrow *$.
+  \end{block}
+\end{frame}
+
+\begin{frame}[fragile]{Higher Kinded Types}{Example}
+\begin{minted}{scala}
+ trait Functor[F[_]] {
+   def map[A, B](fa: F[A])(f: A => B): F[B]
+ }
+
+ val x: Functor[Option] = ???
+ x.map(Some(123)) { x => x.toString } // :Option[String]
+\end{minted}
+\end{frame}
+
+\subsection{Partial Application of HKT}
+\begin{frame}[fragile]{Partial Application of HKT}
+  \begin{block}{}
+    If higher kinded types behave similarly to higher order functions, can they also be partially
+    applied?
+  \end{block}
+  \bigskip
+  \begin{minted}{scala}
+  type StringOr = Either[_, String] // this is an existential type
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Partial Application of HKT}
+\begin{onlyenv}<1>
+\begin{minted}{scala}
+val efs: Functor[Either[_, String]] = ??? 
+              // ^ error: Either[_, String] takes no type parameters, expected: one
+\end{minted}
+\end{onlyenv}
+\begin{onlyenv}<2>
+\begin{minted}{scala}
+val efs = new Functor[???] {
+    override def map[A, B](fa: Either[Int, A])(f: A => B): Either[Int, B] = ???
+}
+\end{minted}
+\end{onlyenv}
+\begin{onlyenv}<3>
+\begin{minted}{scala}
+type IntOrA[A] = Either[Int, A]
+val efs = new Functor[IntOrA] {
+    override def map[A, B](fa: Either[Int, A])(f: A => B): Either[Int, B] = ???
+}
+\end{minted}
+\end{onlyenv}
+\begin{onlyenv}<4>
+\begin{minted}{scala}
+val efs = new Functor[({type lam[Y] = Either[Int, Y]})#lam] {
+    override def map[A, B](fa: Either[Int, A])(f: A => B): Either[Int, B] = ???
+}
+\end{minted}
+\end{onlyenv}
+\end{frame}
+
+\begin{frame}[fragile]{Kind Projector}
+  Type lambda syntax in Scala 2 is verbose. Kind projector plugin\cite{kind-proj} solves this issue
+  for HKT-heavy applications.
+  \bigskip
+  \pause
+  \begin{minted}{scala}
+    Tuple2[*, Double]        // equivalent to: type R[A] = Tuple2[A, Double]
+    Either[Int, +*]          // equivalent to: type R[+A] = Either[Int, A]
+    Function2[-*, Long, +*]  // equivalent to: type R[-A, +B] = Function2[A, Long, B]
+    EitherT[*[_], Int, *]    // equivalent to: type R[F[_], B] = EitherT[F, Int, B]
+  \end{minted}
+\end{frame}
+
+\section{AUX Pattern}
+\begin{frame}{AUX Pattern}
+  \begin{block}{scalac error}
+    illegal dependent method type: parameter appears in the type of another parameter in the same
+    section or an earlier one
+  \end{block}
+  \bigskip
+  Scala tells us that we can’t use the dependent type in the same section, we can use it in the
+  \textbf{next} parameters block or as a \textbf{return type} only.
+
+  This is where AUX pattern\cite{aux} comes into play
+\end{frame}
+
+\begin{frame}[fragile]{AUX Pattern}
+  \begin{onlyenv}<1>
+  \begin{minted}{scala}
+  trait Foo[A] {
+    type B
+    def value: B
+  }
+  
+  def foo[T](t: T)(implicit f: Foo[T]): f.B = f.value                // OK
+  def foo[T](t: T)(implicit f: Foo[T], m: Monoid[f.B]): f.B = m.zero // error
+  \end{minted}
+  \end{onlyenv}
+\begin{onlyenv}<2>
+  \hig{7}
+  \begin{minted}{scala}
+  trait Foo[A] {
+    type B
+    def value: B
+  }
+  
+  def foo[T](t: T)(implicit f: Foo[T]): f.B = f.value
+  def foo[T, B0](t: T)(implicit f: Foo[T] {type B = B0}, m: Monoid[B0]): f.B = m.zero // OK
+  \end{minted}
+  \end{onlyenv}
+  \begin{onlyenv}<3>
+  \begin{minted}{scala}
+  trait Foo[A] {
+    type B
+    def value: B
+  }
+  object Foo {
+    type Aux[A0, B0] = Foo[A0] { type B = B0  }
+  }
+
+  def foo[T, R](t: T)(implicit f: Foo.Aux[T, R], m: Monoid[R]): R = m.zero 
+  \end{minted} 
+  \end{onlyenv}
+\end{frame}
+
+\section{Magnet Pattern}
+\begin{frame}[fragile]{Magnet Pattern}
+  \begin{block}{Problem statement}
+    How to define multiple method overloads with only difference in parametrized types?
+  \end{block}
+  \bigskip
+  \pause
+  \begin{minted}{scala}
+  def complete(future: Future[HttpResponse]): Int
+  def complete(future: Future[StatusCode]): Int
+  \end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Magnet Pattern}
+Define a magnet trait:
+\begin{minted}{scala}
+sealed trait FutureMagnet {
+  type Result
+  def apply() : Result
+}
+
+def completeFuture(magnet: FutureMagnet):magnet.Result = magnet()
+\end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{Magnet Pattern}
+\begin{minted}{scala}
+implicit def fromHttpResponseFuture(future: Future[HttpResponse]) =
+  new CompletionMagnet {
+    type Result = Int
+    def apply(): Result = ... // implementation using future
+  }
+implicit def fromStatusCodeFuture(future: Future[StatusCode]) =
+  new CompletionMagnet {
+    type Result = Int
+    def apply(): Result = ... // implementation using future
+  }
+\end{minted}
+\end{frame}
+
+\begin{thebibliography}{9} 
+\bibitem{exis-adv}
+  \url{https://pjrt.medium.com/existential-types-in-scala-6321f19c4a57}
+\bibitem{f-bounds}
+  \url{https://tpolecat.github.io/2015/04/29/f-bounds.html}
+\bibitem{kubuszok}
+  \url{https://kubuszok.com/compiled/kinds-of-types-in-scala}
+\bibitem{kind-proj}
+  \url{https://github.com/typelevel/kind-projector}
+\bibitem{aux}
+  \url{https://gigiigig.github.io/posts/2015/09/13/aux-pattern.html}
+\bibitem{magnet}
+  \url{http://blog.madhukaraphatak.com/scala-magnet-pattern/}
+\end{thebibliography}
+
+\end{document}
+
