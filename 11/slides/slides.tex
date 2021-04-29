@@ -1,0 +1,164 @@
+\documentclass[aspectratio=169]{beamer}
+
+% SETUP =====================================
+\usepackage[T1,T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage{listings}
+\usepackage{array}
+\usepackage{amssymb}
+\usepackage{pifont}
+\usepackage{minted}
+\usepackage{pgf-pie}
+\usepackage{fancyvrb}
+\usepackage{../../beamerthemeslidesgeneric}
+% SETUP =====================================
+
+\title{Scala Ecosystem: Cats Effect}
+\author{Mikhail Mutcianko, Alexey Shcherbakov}
+\institute{СПБгУ, СП}
+\date{22 апреля 2021}
+
+\begin{document}
+
+\frame{\titlepage}
+
+% refferentail transparency
+\begin{frame}{Effect}
+  In functional programming an \textit{effect} is a context in which your computation operates:
+  \begin{itemize}
+    \item \texttt{Option} models the absence of value
+    \item \texttt{Try} models the possibility of failure
+    \item \texttt{Future} models the asynchronicity of a computation
+    \item \ldots
+  \end{itemize}
+  \bigskip
+  Side effects thereby denote computational leaks that escape your effect, or context
+\end{frame}
+
+\begin{frame}[fragile]{Referential Transparency}
+ An expression is said to be \textit{referential transparent} when it can be replaced by its value without
+ changing the program
+ \bigskip
+\begin{minted}{scala}
+def sum(a: Int, b: Int): Int = a + b
+
+assertEquals(5, sum(2,3))
+\end{minted}
+\end{frame}
+
+% basic principle: don't run side effects - IO monad
+\begin{frame}[fragile]{Principle}
+\begin{center}
+How to make code that performs side-effects referentially transparent?\\
+\pause
+  \Large Not to run it
+\end{center}
+\pause
+\texttt{cats.effect.IO} does exactly this: it wraps a computation but doesn’t run it
+
+\begin{minted}{scala}
+val n = IO {  // doesn't print anything
+  print("n")
+  3
+}
+\end{minted}
+\end{frame}
+
+\begin{frame}[fragile]{IO basics}
+You run an \texttt{IO} by calling one of the “unsafe” method that it provides:
+\begin{itemize}
+  \item \texttt{unsafeRunSync} runs the program synchronously
+  \item \texttt{unsafeRunTimed} runs the program synchronously but abort after a specified timeout 
+  \item \texttt{unsafeRunAsync} runs the program asynchronously and execute the specified callback when done
+  \item \texttt{unsafeToFuture} runs the program and produces the result as a Scala Future 
+  \item \ldots
+\end{itemize}
+\end{frame}
+
+% conditional running
+\begin{frame}[fragile]{Conditional running}
+By not running the code straight away we get additional capabilities. E.g. it’s possible to decide
+to run a computation after declaring it:
+\bigskip
+\begin{minted}{scala}
+val isWeekday = true
+for {
+   _ <- IO(println("Working")).whenA(isWeekday)
+   _ <- IO(println("Offwork")).unlessA(isWeekday)
+} yield ()
+\end{minted}
+\end{frame}
+
+% async running
+\begin{frame}[fragile]{Async IO}
+When you need to interact with remote systems and in this case you need an \texttt{asynchronous IO}.
+An \texttt{asynchronous IO} is created by passing a callback that is invoked when the computation completes.
+\bigskip
+\begin{minted}{scala}
+def fromCompletableFuture[A](f: => CompetableFuture[A]): IO[A] =
+  IO.async { callback =>
+    f.whenComplete { (res: A, error: Throwable) =>
+      if (error == null) callback(Right(res))
+      else callback(Left(error))
+    } 
+  }
+\end{minted}
+\end{frame}
+
+% brackets
+\begin{frame}[fragile]{Brackets}
+  IO being lazy it’s possible to make sure all the resources used in the computation are released
+  properly no matter the outcome of the computation. Think of it as a \texttt{try~/~catch~/~finally}.
+  In cats-effect this is called \texttt{Bracket}
+  \bigskip
+  \begin{minted}{scala}
+    // acquire the resource
+    IO(new Socket("hostname", 12345)).bracket { socket =>
+      // use the socket here
+    } { socket =>
+      // release block
+      socket.close()
+    }
+  \end{minted}
+\end{frame}
+
+% resources
+\begin{frame}[fragile]{Resources}
+  \texttt{Resource} builds on top of \texttt{Bracket}. It allows to acquire resources (and making sure they are
+  released properly) before running your computation. Moreover \texttt{Resource} is composable so that you
+  can acquire all your resources at once.
+  \begin{minted}{scala}
+def acquire(s: String) = IO(println(s"Acquire $s")) *> IO.pure(s)
+def release(s: String) = IO(println(s"Releasing $s"))
+val resources = for {
+   a <- Resource.make(acquire("A"))(release("A"))
+   b <- Resource.make(acquire("B"))(release("B"))
+} yield (a ,b)
+
+resources.use { case (a, b) => // use a and b
+} // release code is automatically invoked when computation finishes
+  \end{minted}
+\end{frame}
+
+% cancellation
+\begin{frame}[fragile]{Cancellation}
+Async \texttt{IO} takes \texttt{Callback => Unit}\\
+To be able to cancel, we need to somehow pass another \texttt{IO} that's able to cancel the computation
+\bigskip
+\begin{minted}{scala}
+def cancelable[A](k: (Either[Throwable, A] => Unit) => IO[Unit]): IO[A] = ???
+def fromCompletableFuture[A](f: => CompletableFuture[A]): IO[A] =
+  IO.cancellable { callback =>
+    f.whenComplete(res: A, error: Throwable) =>
+      if (error == null) callback(Right(res))
+      else               callback(Left(error))
+    IO(f.cancel(true)) // cancelling IO
+  }
+\end{minted}
+\end{frame}
+
+% fibers
+
+\end{document}
+

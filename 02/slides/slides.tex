@@ -311,6 +311,8 @@ class Child extends Human with Mother with Father {
 \end{itemize}
 \end{frame}
 
+% TODO: lazy val for cyclic dependencies
+
 \begin{frame}{Properties}
   \begin{block}{}
     All properties \alert{implicitly} generate a backing field, a setter and a getter \\
@@ -419,6 +421,7 @@ class Person() {
   \end{block}
 \end{frame}
 
+% TODO: protected[this] https://github.com/scala/bug/issues/7093
 \begin{frame}[fragile]{Access modifiers}{object-private}
 \begin{block}{}
 The most restrictive access is to mark a method as “object-private.” When you do this, the method is
@@ -649,6 +652,8 @@ Case classes auto generate:
   \item \texttt{copy} method with default values
 \end{itemize}
 \end{frame}
+
+% TODO: partial functions
 
 % destructing assignment
 \begin{frame}[fragile]{Destructuring bindings}
